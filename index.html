@@ -2,7 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Ecojet Radar Operacional PRO</title>
+<title>Ecojet Radar PRO</title>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
 <style>
 body{margin:0;background:#0b0f14;color:#e6f1ff;font-family:Consolas;}
@@ -43,46 +47,30 @@ border-radius:4px;
 text-align:center;
 }
 
-.delay-input{
-color:#ff4d4d;
-font-weight:bold;
-background:#140909;
-border:1px solid #5a1f1f;
-}
-
-/* ESTADOS */
 .estado{
-border-radius:6px;
 padding:4px 8px;
+border-radius:6px;
 color:#fff;
-display:inline-block;
-min-width:95px;
 font-weight:bold;
+display:inline-block;
 }
 
 .plan{background:#1f8f4d;}
 .envuelo{background:#2979ff;}
 .arribado{background:#555;}
+.demora{background:#ff0000;}
 
-/* DEMORA PARPADEANTE */
 .demora{
-background:#ff0000;
-animation:blink 0.6s steps(2, start) infinite;
-box-shadow:0 0 12px #ff0000;
+animation:blink 0.6s infinite;
 }
 
-/* BLINK */
 @keyframes blink{
-0%{opacity:1;}
 50%{opacity:0;}
-100%{opacity:1;}
 }
 
-/* PROGRESS */
 .progress{height:8px;background:#1c252e;border-radius:10px;overflow:hidden;}
 .progress div{height:100%;background:#4db8ff;}
 
-/* MAP */
 .map-container{display:flex;flex-direction:column;height:100%;}
 .tabs{display:flex;background:#111;}
 .tab{flex:1;padding:8px;text-align:center;cursor:pointer;}
@@ -99,19 +87,18 @@ color:#777;
 font-size:12px;
 }
 
-/* CP HEADER */
-.cp-header td{
-background:#0f1a24;
-color:#4db8ff;
-font-weight:bold;
-text-align:left;
-padding:10px;
-border-top:2px solid #1f2933;
-cursor:pointer;
+#modal{
+display:none;
+position:fixed;
+top:25%;
+left:40%;
+background:#111;
+padding:15px;
+border-radius:8px;
+border:1px solid #333;
 }
 
-/* ocultar vuelos */
-.hidden{display:none;}
+#modal input{margin:5px;}
 
 </style>
 </head>
@@ -119,11 +106,9 @@ cursor:pointer;
 <body>
 
 <header>
-<h3>✈ ECOJET RADAR OPERACIONAL PRO</h3>
+<h3>✈ ECOJET RADAR PRO (REAL TIME)</h3>
 <div>
 <button onclick="openModal()">+ Vuelo</button>
-<button onclick="importarCP('CP-3194')">📥 CP-3194</button>
-<button onclick="importarCP('CP-2889')">📥 CP-2889</button>
 <button onclick="clearAll()">🗑</button>
 <span id="clock"></span>
 </div>
@@ -135,20 +120,10 @@ cursor:pointer;
 <table>
 <thead>
 <tr>
-<th>MAT</th>
-<th>Vuelo</th>
-<th>Origen</th>
-<th>Destino</th>
-<th>ETD</th>
-<th>ETA</th>
-<th>ETD REAL</th>
-<th>ETA REAL</th>
-<th>ETD DEMORA</th>
-<th>ETA DEMORA</th>
-<th>DEMORA</th>
-<th>ESTADO</th>
-<th>PROG</th>
-<th>ACC</th>
+<th>Vuelo</th><th>Origen</th><th>Destino</th>
+<th>ETD</th><th>ETA</th>
+<th>REAL ETD</th><th>REAL ETA</th>
+<th>ESTADO</th><th>ACC</th>
 </tr>
 </thead>
 <tbody id="tb"></tbody>
@@ -170,12 +145,13 @@ src="https://www.flightradar24.com/-16.5,-64.5/5"></iframe>
 
 </div>
 
-<footer>Realizado por Yamil Quiroz – Derechos reservados</footer>
+<footer>Ecojet Radar PRO</footer>
 
+<!-- MODAL -->
 <div id="modal">
 <input id="vuelo" placeholder="Vuelo"><br>
-<input id="origen" placeholder="VVI"><br>
-<input id="destino" placeholder="LPB"><br>
+<input id="origen" placeholder="Origen"><br>
+<input id="destino" placeholder="Destino"><br>
 <input id="etd" placeholder="0600"><br>
 <input id="eta" placeholder="0705"><br><br>
 <button onclick="saveFlight()">Guardar</button>
@@ -184,204 +160,109 @@ src="https://www.flightradar24.com/-16.5,-64.5/5"></iframe>
 
 <script>
 
-let flights = JSON.parse(localStorage.getItem("ecojet")||"[]");
+/* 🔥 FIREBASE CONFIG (PEGAR TU INFO) */
+const firebaseConfig = {
+  apiKey: "TU_API_KEY",
+  authDomain: "TU_AUTH_DOMAIN",
+  projectId: "panel-de-seguimineto",
+  storageBucket: "TU_STORAGE_BUCKET",
+  messagingSenderId: "TU_SENDER_ID",
+  appId: "TU_APP_ID"
+};
 
-const BOLIVIA_OFFSET = -4;
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const flightsRef = db.collection("flights");
+
+/* DATA */
+let flights = [];
+
+/* REAL TIME */
+flightsRef.onSnapshot(snapshot=>{
+flights = [];
+snapshot.forEach(doc=>{
+flights.push({id:doc.id,...doc.data()});
+});
+render();
+});
 
 /* CLOCK */
-const clock = document.getElementById("clock");
-
-function clockUTC(){
+setInterval(()=>{
 let n=new Date();
-clock.innerText=
+document.getElementById("clock").innerText=
 String(n.getUTCHours()).padStart(2,"0")+":"+
-String(n.getUTCMinutes()).padStart(2,"0")+":"+
-String(n.getUTCSeconds()).padStart(2,"0")+" UTC";
-}
-setInterval(clockUTC,1000);
-
-/* SAVE */
-function save(){
-localStorage.setItem("ecojet",JSON.stringify(flights));
-}
+String(n.getUTCMinutes()).padStart(2,"0")+" UTC";
+},1000);
 
 /* FORMAT */
 function fix(t){
 if(!t)return"";
 t=t.replace(":","");
-if(t.length===4)return t.slice(0,2)+":"+t.slice(2);
-return t;
+return t.length===4?t.slice(0,2)+":"+t.slice(2):t;
 }
 
-/* PARSE */
-function parse(t){
-if(!t)return null;
-let[h,m]=t.split(":").map(Number);
-let now=new Date();
-
-return new Date(Date.UTC(
-now.getUTCFullYear(),
-now.getUTCMonth(),
-now.getUTCDate(),
-h - BOLIVIA_OFFSET,
-m,0
-));
-}
-
-/* DEMORA */
-function delay(f){
-if(!f.etd_real || !f.etd)return 0;
-let planned=parse(f.etd);
-let real=parse(f.etd_real);
-return Math.max(0,Math.round((real-planned)/60000));
-}
-
-/* ESTADO */
-function estadoAuto(f){
-let now=new Date();
-let s=parse(f.etd_real||f.etd);
-let e=parse(f.eta_real||f.eta);
-let d=delay(f);
-
-if(d>0)return "DEMORADO";
-if(now<s)return "PLANIFICADO";
-if(now>=s && now<=e)return "EN VUELO";
-if(now>e)return "ARRIBADO";
-return "PLANIFICADO";
-}
-
-function estadoClass(e){
-return e==="PLANIFICADO"?"plan":
-e==="EN VUELO"?"envuelo":
-e==="ARRIBADO"?"arribado":"demora";
-}
-
-/* PROGRESS */
-function prog(f){
-let s=parse(f.etd_real||f.etd);
-let e=parse(f.eta_real||f.eta);
-if(!s||!e)return 0;
-let n=new Date();
-if(n<=s)return 0;
-if(n>=e)return 1;
-return(n-s)/(e-s);
-}
-
-/* CRUD */
-function setVal(i,k,v){flights[i][k]=fix(v);render();}
-function del(i){flights.splice(i,1);render();}
-function clearAll(){flights=[];render();}
-
-function openModal(){modal.style.display="block";}
-function closeModal(){modal.style.display="none";}
-
+/* SAVE */
 function saveFlight(){
-flights.push({
-matricula:"MANUAL",
+flightsRef.add({
 vuelo:vuelo.value,
 origen:origen.value,
 destino:destino.value,
 etd:fix(etd.value),
 eta:fix(eta.value),
-etd_delay:"",
-eta_delay:""
+etd_real:"",
+eta_real:""
 });
-closeModal();render();
+closeModal();
 }
 
-/* IMPORT */
-function importarCP(mat){
-let t=prompt("CP FORMAT:\nCP-3194 100 VVI LPB 06:00 07:05");
-if(!t)return;
-
-t.split("\n").forEach(line=>{
-let c=line.trim().split(/\s+/);
-if(c.length<5)return;
-
-let m=c[0].startsWith("CP")?c[0]:mat;
-let offset=c[0].startsWith("CP")?1:0;
-
-flights.push({
-matricula:m,
-vuelo:c[offset],
-origen:c[offset+1],
-destino:c[offset+2],
-etd:fix(c[offset+3]),
-eta:fix(c[offset+4]),
-etd_delay:"",
-eta_delay:""
+/* UPDATE */
+function setVal(id,key,value){
+flightsRef.doc(id).update({
+[key]:fix(value)
 });
-});
-
-render();
 }
 
-/* TAB */
-function tab(id,el){
-document.querySelectorAll("iframe").forEach(i=>i.classList.remove("active"));
-document.getElementById(id).classList.add("active");
-
-document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
-el.classList.add("active");
+/* DELETE */
+function del(id){
+flightsRef.doc(id).delete();
 }
 
-/* RENDER CP TOGGLE */
+/* RENDER */
 function render(){
 let tb=document.getElementById("tb");
 tb.innerHTML="";
 
-let lastCP="";
-
-flights.forEach((f,i)=>{
-
-if(f.matricula!==lastCP){
+flights.forEach(f=>{
 tb.innerHTML+=`
-<tr class="cp-header" onclick="toggleCP('${f.matricula}')">
-<td colspan="14">✈ ${f.matricula}</td>
-</tr>
-`;
-lastCP=f.matricula;
-}
-
-let estado=estadoAuto(f);
-
-tb.innerHTML+=`
-<tr class="cp-${f.matricula}">
-<td>${f.matricula}</td>
+<tr>
 <td>${f.vuelo}</td>
 <td>${f.origen}</td>
 <td>${f.destino}</td>
 <td>${f.etd}</td>
 <td>${f.eta}</td>
 
-<td><input class="time-input" value="${f.etd_real||""}" onchange="setVal(${i},'etd_real',this.value)"></td>
-<td><input class="time-input" value="${f.eta_real||""}" onchange="setVal(${i},'eta_real',this.value)"></td>
+<td><input value="${f.etd_real||""}" onchange="setVal('${f.id}','etd_real',this.value)"></td>
+<td><input value="${f.eta_real||""}" onchange="setVal('${f.id}','eta_real',this.value)"></td>
 
-<td><input class="time-input delay-input" value="${f.etd_delay||""}" onchange="setVal(${i},'etd_delay',this.value)"></td>
-<td><input class="time-input delay-input" value="${f.eta_delay||""}" onchange="setVal(${i},'eta_delay',this.value)"></td>
+<td>${f.estado||"EN ESPERA"}</td>
 
-<td>${delay(f)} min</td>
-
-<td><span class="estado ${estadoClass(estado)}">${estado}</span></td>
-
-<td><div class="progress"><div style="width:${Math.round(prog(f)*100)}%"></div></div></td>
-
-<td><button onclick="del(${i})">✖</button></td>
+<td><button onclick="del('${f.id}')">✖</button></td>
 </tr>
 `;
 });
-
-save();
 }
 
-function toggleCP(cp){
-document.querySelectorAll(`.cp-${cp}`).forEach(r=>{
-r.classList.toggle("hidden");
-});
-}
+/* UI */
+function openModal(){modal.style.display="block";}
+function closeModal(){modal.style.display="none";}
+function clearAll(){alert("Borra desde Firebase");}
 
-setInterval(render,4000);
-render();
+function tab(id,el){
+document.querySelectorAll("iframe").forEach(i=>i.classList.remove("active"));
+document.getElementById(id).classList.add("active");
+document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+el.classList.add("active");
+}
 
 </script>
 
