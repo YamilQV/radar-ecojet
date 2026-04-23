@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>Ecojet Radar PRO</title>
 
-<!-- Firebase -->
+<!-- FIREBASE COMPAT -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
@@ -38,8 +38,8 @@ height:calc(100vh - 60px);
 table{width:100%;border-collapse:collapse;font-size:13px;}
 td,th{padding:6px;border-bottom:1px solid #222;text-align:center;}
 
-.time-input{
-width:60px;
+input{
+width:70px;
 background:#111;
 color:#4db8ff;
 border:1px solid #333;
@@ -58,18 +58,24 @@ display:inline-block;
 .plan{background:#1f8f4d;}
 .envuelo{background:#2979ff;}
 .arribado{background:#555;}
-.demora{background:#ff0000;}
-
 .demora{
+background:#ff0000;
 animation:blink 0.6s infinite;
 }
 
-@keyframes blink{
-50%{opacity:0;}
+@keyframes blink{50%{opacity:0;}}
+
+.progress{
+height:8px;
+background:#1c252e;
+border-radius:10px;
+overflow:hidden;
 }
 
-.progress{height:8px;background:#1c252e;border-radius:10px;overflow:hidden;}
-.progress div{height:100%;background:#4db8ff;}
+.progress div{
+height:100%;
+background:#4db8ff;
+}
 
 .map-container{display:flex;flex-direction:column;height:100%;}
 .tabs{display:flex;background:#111;}
@@ -78,14 +84,6 @@ animation:blink 0.6s infinite;
 
 iframe{width:100%;height:100%;border:none;display:none;}
 iframe.active{display:block;}
-
-footer{
-background:#111;
-text-align:center;
-padding:6px;
-color:#777;
-font-size:12px;
-}
 
 #modal{
 display:none;
@@ -100,6 +98,13 @@ border:1px solid #333;
 
 #modal input{margin:5px;}
 
+footer{
+background:#111;
+text-align:center;
+padding:6px;
+color:#777;
+font-size:12px;
+}
 </style>
 </head>
 
@@ -109,7 +114,6 @@ border:1px solid #333;
 <h3>✈ ECOJET RADAR PRO (REAL TIME)</h3>
 <div>
 <button onclick="openModal()">+ Vuelo</button>
-<button onclick="clearAll()">🗑</button>
 <span id="clock"></span>
 </div>
 </header>
@@ -145,7 +149,7 @@ src="https://www.flightradar24.com/-16.5,-64.5/5"></iframe>
 
 </div>
 
-<footer>Ecojet Radar PRO</footer>
+<footer>Ecojet Radar PRO - Firebase Real Time</footer>
 
 <!-- MODAL -->
 <div id="modal">
@@ -160,14 +164,14 @@ src="https://www.flightradar24.com/-16.5,-64.5/5"></iframe>
 
 <script>
 
-/* 🔥 FIREBASE CONFIG (PEGAR TU INFO) */
+/* 🔥 FIREBASE CONFIG */
 const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_AUTH_DOMAIN",
+  apiKey: "AIzaSyAH4BU7b9F5JU8wAIdgKTp1xWhcQrCp7Yo",
+  authDomain: "panel-de-seguimineto.firebaseapp.com",
   projectId: "panel-de-seguimineto",
-  storageBucket: "TU_STORAGE_BUCKET",
-  messagingSenderId: "TU_SENDER_ID",
-  appId: "TU_APP_ID"
+  storageBucket: "panel-de-seguimineto.appspot.com",
+  messagingSenderId: "359422683248",
+  appId: "1:359422683248:web:08ae2346c3fed7f192ecb5"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -177,7 +181,7 @@ const flightsRef = db.collection("flights");
 /* DATA */
 let flights = [];
 
-/* REAL TIME */
+/* REAL TIME SYNC */
 flightsRef.onSnapshot(snapshot=>{
 flights = [];
 snapshot.forEach(doc=>{
@@ -244,7 +248,7 @@ tb.innerHTML+=`
 <td><input value="${f.etd_real||""}" onchange="setVal('${f.id}','etd_real',this.value)"></td>
 <td><input value="${f.eta_real||""}" onchange="setVal('${f.id}','eta_real',this.value)"></td>
 
-<td>${f.estado||"EN ESPERA"}</td>
+<td class="estado ${estado(f)}">${estado(f)}</td>
 
 <td><button onclick="del('${f.id}')">✖</button></td>
 </tr>
@@ -252,14 +256,21 @@ tb.innerHTML+=`
 });
 }
 
+/* ESTADO SIMPLE */
+function estado(f){
+if(f.etd_real && f.eta_real) return "EN VUELO";
+if(f.etd_real) return "DESPEGADO";
+return "PLANIFICADO";
+}
+
 /* UI */
 function openModal(){modal.style.display="block";}
 function closeModal(){modal.style.display="none";}
-function clearAll(){alert("Borra desde Firebase");}
 
 function tab(id,el){
 document.querySelectorAll("iframe").forEach(i=>i.classList.remove("active"));
 document.getElementById(id).classList.add("active");
+
 document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
 el.classList.add("active");
 }
